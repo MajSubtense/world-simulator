@@ -1,0 +1,42 @@
+# Godot 4+
+.godot/
+.import/
+export.cfg
+export_presets.cfg
+
+# Godot-specific ignores
+*.translation
+
+# Mono / C#
+.mono/
+data_*/
+mono_crash.*.json
+
+# Runtime / build artifacts
+*.tmp
+*.log
+*.bin
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Build outputs
+build/
+dist/
+*.exe
+*.dmg
+*.app
+*.x86_64
+*.x86_32
+*.arm64
+*.arm32
+*.zip
