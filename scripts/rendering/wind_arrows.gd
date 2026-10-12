@@ -1,14 +1,9 @@
 class_name WindArrows
 extends Node2D
 ## 地图风场箭头。
-## 优化：
 ##   - 静态数据只在参数变化时计算一次
 ##   - 每 0.3 秒重绘一次
 ##   - 全部用三角形批量提交（1 次 draw call）
-## 视觉：
-##   - 主干是细矩形
-##   - 头部是三角形
-##   - 从中心对称伸出（视觉重心在采样点）
 
 @export var sample_step: int = 32
 @export var arrow_length: float = 12.0
@@ -40,8 +35,6 @@ func _process(delta: float) -> void:
 		_timer = 0.0
 		queue_redraw()
 
-# ============================================================
-#  外部接口
 # ============================================================
 func update_wind(wind: PackedVector3Array) -> void:
 	wind_data = wind
@@ -75,8 +68,6 @@ func set_sample_step(step: int) -> void:
 	queue_redraw()
 
 # ============================================================
-#  静态数据缓存
-# ============================================================
 func _rebuild_samples() -> void:
 	_samples.clear()
 	if face_lookup == null:
@@ -89,16 +80,16 @@ func _rebuild_samples() -> void:
 		while gx < map_width:
 			var u := (float(gx) + 0.5) / float(map_width)
 			var v := (float(gy) + 0.5) / float(map_height)
-			var dir3 := MapProjectionHelper.uv_to_dir(u, v, projection)
+			var dir3 := MapProjection.uv_to_dir(u, v, projection)
 
 			if dir3 != Vector3.ZERO:
-				var pu := MapProjectionHelper.uv_to_dir(u + eps, v, projection)
-				var pv := MapProjectionHelper.uv_to_dir(u, v + eps, projection)
+				var pu := MapProjection.uv_to_dir(u + eps, v, projection)
+				var pv := MapProjection.uv_to_dir(u, v + eps, projection)
 				if pu != Vector3.ZERO and pv != Vector3.ZERO:
 					var dx := pu - dir3
 					var dy := pv - dir3
-					if dx.length_squared() > 0.000001 \
-							and dy.length_squared() > 0.000001:
+					if (dx.length_squared() > 0.000001
+							and dy.length_squared() > 0.000001):
 						dx = dx.normalized()
 						dy = dy.normalized()
 						var f := face_lookup.find(dir3)
@@ -113,8 +104,6 @@ func _rebuild_samples() -> void:
 		gy += sample_step
 
 # ============================================================
-#  绘制
-# ============================================================
 func _draw() -> void:
 	if wind_data.size() == 0 or _samples.is_empty():
 		return
@@ -126,7 +115,6 @@ func _draw() -> void:
 	_tri_points.clear()
 	_tri_colors.clear()
 
-	# 顶点缓存
 	var p0: Vector2
 	var p1: Vector2
 	var p2: Vector2
@@ -151,7 +139,6 @@ func _draw() -> void:
 		var len_px := arrow_length * display_scale \
 			* clampf(mag * strength_scale, 0.35, 1.4)
 
-		# 从采样点沿方向伸出，尾部留 30%
 		var center := Vector2(s.gx * sx, s.gy * sy)
 		var tip := center + dir2 * len_px * 0.7
 		var tail := center - dir2 * len_px * 0.3
@@ -171,11 +158,9 @@ func _draw() -> void:
 		p1 = tail - stem_p
 		p2 = head_base + stem_p
 		p3 = head_base - stem_p
-		# 三角形 1
 		_tri_points.append(p0)
 		_tri_points.append(p1)
 		_tri_points.append(p2)
-		# 三角形 2
 		_tri_points.append(p1)
 		_tri_points.append(p3)
 		_tri_points.append(p2)
@@ -187,7 +172,6 @@ func _draw() -> void:
 		_tri_points.append(p4)
 		_tri_points.append(p5)
 
-		# 颜色
 		for i in 9:
 			_tri_colors.append(arrow_color)
 

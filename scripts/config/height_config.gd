@@ -1,5 +1,6 @@
 class_name HeightConfig
 extends Resource
+## 高程生成参数。阶段 2 的单一真源。
 
 @export_group("Base")
 @export_range(0.0, 0.05, 0.005) var land_base: float = 0.010

@@ -28,7 +28,6 @@ var _N: int = 0
 const SHADER_PATH := "res://scripts/rendering/planet_view_3d.gdshader"
 const MAX_W := 1024
 
-# 与 shader 的 mode 编号对齐
 const MODE_LAND        := 0
 const MODE_HEIGHT      := 1
 const MODE_TEMPERATURE := 2
@@ -36,6 +35,9 @@ const MODE_PRECIP      := 3
 const MODE_CLOUD       := 4
 const MODE_SNOW        := 5
 const MODE_HUM_ATM     := 6
+const MODE_VEG_TYPE    := 7
+const MODE_VEG_DENSITY := 8
+const MODE_TEMP_EMA    := 9
 
 func _ready() -> void:
 	var shader: Shader = load(SHADER_PATH)

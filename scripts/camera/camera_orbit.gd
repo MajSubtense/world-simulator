@@ -53,3 +53,18 @@ func _update_camera() -> void:
 	) * distance
 	_cam.position = offset
 	_cam.look_at(Vector3.ZERO)
+
+func get_camera() -> Camera3D:
+	return _cam
+
+## 让相机聚焦到给定方向。相机位置位于 dir * distance，看向原点。
+## 因此 dir 方向的面朝相机。
+func focus_on_dir(dir: Vector3) -> void:
+	if dir.length_squared() < 0.000001:
+		return
+	var d := dir.normalized()
+	pitch = asin(clampf(d.y, -1.0, 1.0))
+	yaw = atan2(d.x, d.z)
+	var limit := PI / 2.0 - PITCH_MARGIN
+	pitch = clampf(pitch, -limit, limit)
+	_update_camera()

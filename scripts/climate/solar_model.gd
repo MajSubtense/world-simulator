@@ -10,13 +10,12 @@ extends RefCounted
 
 static func sun_direction(tick: int, day_length: int,
 		tilt: float, season: float = 0.0) -> Vector3:
-	var day_angle := float(tick % maxi(1, day_length)) / float(maxi(1, day_length)) * TAU
+	var day_len := maxi(1, day_length)
+	var day_angle := float(tick % day_len) / float(day_len) * TAU
 
-	# 季节相位决定太阳在南北半球的偏移
 	var season_angle := season * TAU
 	var y := tilt * sin(season_angle)
 
-	# 自转平面
 	var cos_y := sqrt(maxf(0.0, 1.0 - y * y))
 	return Vector3(cos(day_angle) * cos_y, y, sin(day_angle) * cos_y).normalized()
 
@@ -26,4 +25,5 @@ static func solar_intensity(face_normal: Vector3, sun_dir: Vector3) -> float:
 
 ## 根据 tick 返回当天的"小时数"（用于 UI 显示）
 static func hour_of_day(tick: int, day_length: int) -> float:
-	return float(tick % maxi(1, day_length)) / float(maxi(1, day_length)) * 24.0
+	var day_len := maxi(1, day_length)
+	return float(tick % day_len) / float(day_len) * 24.0

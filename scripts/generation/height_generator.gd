@@ -9,11 +9,10 @@ extends RefCounted
 ##   + 丘陵    ← 高频细节
 ##   海洋      ← 基础深度 + 洋底起伏
 ##
-## 参数来源：
-##   全部从 HeightConfig 读取。
+## 参数来源：HeightConfig。
 ##
 ## 与 LandGenerator 的耦合：
-##   通过 config 的 land_gen 引用调用 land_score_at(dir)，
+##   通过 land_gen 引用调用 land_score_at(dir)，
 ##   保证山脉与海岸线对齐。
 
 var config: HeightConfig
@@ -62,22 +61,18 @@ func generate(data: PlanetData) -> void:
 
 	data.sync_face_elevation()
 
-# ============================================================
-#  采样
-# ============================================================
-
 ## 在任意方向上采样高度（单位：球面半径倍数）。
-## 供 ChunkGenerator / 地图 / 玩家附近的精细采样复用。
-## 输入：
-##   dir        单位方向向量
-##   is_land    该方向是否陆地
-##   land_score 该方向的 land_score（0=海岸，1=内陆最深处）
+## 供 chunk / 地图 / 玩家附近采样复用。
 func sample_height(dir: Vector3, is_land: bool, land_score: float) -> float:
 	_ensure_noises()
 	if is_land:
 		return _land_height(dir, land_score)
 	else:
 		return _ocean_height(dir)
+
+# ============================================================
+#  地形分层
+# ============================================================
 
 func _land_height(dir: Vector3, land_score: float) -> float:
 	var lc := clampf(land_score, 0.0, 1.0)
@@ -106,7 +101,6 @@ func _land_height(dir: Vector3, land_score: float) -> float:
 
 	var mountain_mask := smoothstep(0.05, 0.20, lc)
 	var mountain := belt * ridge * config.mountain_peak * mountain_mask
-	# 高原上抑制山脉
 	mountain *= (1.0 - plateau_mask * 0.5)
 
 	# ---- 5. 丘陵 ----
@@ -130,20 +124,9 @@ func _ensure_noises() -> void:
 		return
 	if config == null:
 		return
-	_plateau_noise = _make_noise(config.plateau_seed, config.plateau_freq, 3)
-	_belt_noise    = _make_noise(config.mountain_seed, config.belt_freq, 3)
-	_ridge_noise   = _make_noise(config.mountain_seed + 1, config.ridge_freq, 4)
-	_hill_noise    = _make_noise(config.mountain_seed + 777, config.hill_freq, 3)
-	_ocean_noise   = _make_noise(config.ocean_seed, config.ocean_freq, 4)
-	_ocean_detail_noise = _make_noise(config.ocean_seed + 888, config.ocean_detail_freq, 3)
-
-func _make_noise(seed_val: int, freq: float, octaves: int) -> FastNoiseLite:
-	var n := FastNoiseLite.new()
-	n.seed = seed_val
-	n.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	n.frequency = freq
-	n.fractal_type = FastNoiseLite.FRACTAL_FBM
-	n.fractal_octaves = octaves
-	n.fractal_lacunarity = 2.0
-	n.fractal_gain = 0.5
-	return n
+	_plateau_noise = NoiseFactory.simplex(config.plateau_seed, config.plateau_freq, 3)
+	_belt_noise    = NoiseFactory.simplex(config.mountain_seed, config.belt_freq, 3)
+	_ridge_noise   = NoiseFactory.ridged(config.mountain_seed + 1, config.ridge_freq, 4)
+	_hill_noise    = NoiseFactory.simplex(config.mountain_seed + 777, config.hill_freq, 3)
+	_ocean_noise   = NoiseFactory.simplex(config.ocean_seed, config.ocean_freq, 4)
+	_ocean_detail_noise = NoiseFactory.simplex(config.ocean_seed + 888, config.ocean_detail_freq, 3)

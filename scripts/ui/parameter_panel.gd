@@ -15,9 +15,10 @@ signal view_mode_changed(is_map: bool)
 signal map_projection_changed(projection: int)
 signal map_mode_changed(mode: int)
 signal wind_arrows_toggled(show: bool)
-signal enter_select_pressed
 signal confirm_deploy_pressed
 signal cancel_select_pressed
+signal layer_3d_changed(mode: int)
+signal terminator_toggled(show: bool)
 
 # ---- 配置对象（外部注入）----
 var land_config: LandConfig
@@ -47,7 +48,8 @@ const GROUPS := {
 	],
 	"climate": [
 		{"title": "Time", "open": true, "keys": [
-			"ticks_per_second", "day_length", "sun_tilt", "sun_season"]},
+			"ticks_per_second", "ticks_per_day", "ticks_per_year",
+			"axial_tilt", "initial_season"]},
 		{"title": "Temperature", "open": false, "keys": [
 			"solar_absorption", "thermal_emission", "base_relaxation",
 			"lapse_rate", "advection_speed", "diffusion_coeff"]},
@@ -66,6 +68,9 @@ const GROUPS := {
 			"melt_rate", "runoff_ratio", "baseflow_rate"]},
 		{"title": "River", "open": false, "keys": [
 			"river_trigger_interval", "river_substeps", "river_flow_rate"]},
+		{"title": "Ecology", "open": false, "keys": [
+			"ecology_interval", "ecology_recovery_rate",
+			"ecology_density_scale", "ecology_temp_ema"]},
 	],
 }
 
@@ -88,8 +93,10 @@ var _projection_row: HBoxContainer
 var _mode_row: HBoxContainer
 var _mode_opt: OptionButton
 var _arrow_check: CheckBox
+var _layer_3d_row: HBoxContainer
+var _layer_3d_opt: OptionButton
+var _terminator_check: CheckBox
 
-var _select_btn: Button
 var _confirm_btn: Button
 var _cancel_btn: Button
 var _selected_plot_label: Label
@@ -197,6 +204,7 @@ func _build_ui() -> void:
 	vbox.add_child(_phase_label)
 
 	_build_view_row(vbox)
+	_build_layer_3d_row(vbox)
 	_build_projection_row(vbox)
 	_build_map_mode_row(vbox)
 
@@ -255,6 +263,35 @@ func _build_view_row(parent: Control) -> void:
 		btn_3d.button_pressed = false
 		view_mode_changed.emit(true))
 
+func _build_layer_3d_row(parent: Control) -> void:
+	_layer_3d_row = HBoxContainer.new()
+	_layer_3d_row.add_theme_constant_override("separation", 6)
+	_layer_3d_row.visible = false
+	parent.add_child(_layer_3d_row)
+
+	var lbl := Label.new()
+	lbl.text = "3D Layer"
+	lbl.custom_minimum_size = Vector2(80, 0)
+	_layer_3d_row.add_child(lbl)
+
+	_layer_3d_opt = OptionButton.new()
+	_layer_3d_opt.add_item("Temperature",        2)
+	_layer_3d_opt.add_item("Temperature (EMA)",  9)
+	_layer_3d_opt.add_item("Precipitation",      3)
+	_layer_3d_opt.add_item("Cloud",              4)
+	_layer_3d_opt.add_item("Snow",               5)
+	_layer_3d_opt.add_item("Atm Humidity",       6)
+	_layer_3d_opt.add_item("Vegetation Type",    7)
+	_layer_3d_opt.add_item("Vegetation Density", 8)
+	_layer_3d_opt.select(0)
+	_layer_3d_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_layer_3d_opt.focus_mode = Control.FOCUS_NONE
+	_layer_3d_row.add_child(_layer_3d_opt)
+
+	_layer_3d_opt.item_selected.connect(func(idx):
+		var mode: int = _layer_3d_opt.get_item_id(idx)
+		layer_3d_changed.emit(mode))
+
 # ============================================================
 #  投影行
 # ============================================================
@@ -308,6 +345,13 @@ func _build_map_mode_row(parent: Control) -> void:
 		map_mode_changed.emit(mode)
 		_refresh_map_rows())
 
+	_terminator_check = CheckBox.new()
+	_terminator_check.text = "Day/Night"
+	_terminator_check.button_pressed = false
+	_terminator_check.focus_mode = Control.FOCUS_NONE
+	_mode_row.add_child(_terminator_check)
+	_terminator_check.toggled.connect(func(v): terminator_toggled.emit(v))
+
 	_arrow_check = CheckBox.new()
 	_arrow_check.text = "Arrows"
 	_arrow_check.button_pressed = false
@@ -338,16 +382,6 @@ func _build_step_buttons(parent: Control) -> void:
 	row.add_child(_next_btn)
 
 	# ---- 部署区 ----
-	# CLIMATE 阶段：选择部署位置
-	_select_btn = Button.new()
-	_select_btn.text = "▶  选择部署位置"
-	_select_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_select_btn.focus_mode = Control.FOCUS_NONE
-	_select_btn.visible = false
-	_select_btn.add_theme_color_override("font_color", Color(0.6, 1.0, 0.7))
-	_select_btn.pressed.connect(func(): enter_select_pressed.emit())
-	parent.add_child(_select_btn)
-
 	# SELECT 阶段：显示已选地块 + 确认/返回
 	_selected_plot_label = Label.new()
 	_selected_plot_label.text = "未选择地块"
@@ -532,10 +566,27 @@ func _make_spinbox(parent: Control, cfg: Resource,
 	var commit := func():
 		cfg.set(spec.key, int(spin.value))
 		on_change.call()
+
+	# 防抖计时器：停止输入 0.5 秒后自动提交
+	var timer := Timer.new()
+	timer.one_shot = true
+	timer.wait_time = 0.5
+	timer.timeout.connect(func(): commit.call())
+	spin.add_child(timer)
+
+	# 打字 / 点箭头都会触发 value_changed → 重置计时器
+	spin.value_changed.connect(func(_v):
+		timer.start())
+
+	# Enter / 失焦时立即提交（覆盖防抖延迟）
 	var line_edit := spin.get_line_edit()
 	if line_edit != null:
-		line_edit.text_submitted.connect(func(_t): commit.call())
-		line_edit.focus_exited.connect(func(): commit.call())
+		line_edit.text_submitted.connect(func(_t):
+			timer.stop()
+			commit.call())
+		line_edit.focus_exited.connect(func():
+			timer.stop()
+			commit.call())
 
 func _format(v: float, force_int: bool) -> String:
 	return "%d" % int(round(v)) if force_int else "%.3f" % v
@@ -552,8 +603,15 @@ func show_phase(phase: int) -> void:
 	_prev_btn.visible = (phase != Phase.LAND)
 	_next_btn.visible = (phase != Phase.SELECT)
 
-	if _select_btn != null:
-		_select_btn.visible = (phase == Phase.CLIMATE)
+	# CLIMATE 阶段的 Next 按钮变为"选择部署位置"
+	if _next_btn != null:
+		if phase == Phase.CLIMATE:
+			_next_btn.text = "▶  选择部署位置"
+			_next_btn.add_theme_color_override("font_color", Color(0.6, 1.0, 0.7))
+		else:
+			_next_btn.text = "Next →"
+			_next_btn.remove_theme_color_override("font_color")
+
 	if _selected_plot_label != null:
 		_selected_plot_label.visible = (phase == Phase.SELECT)
 	if _cancel_btn != null:
@@ -595,11 +653,8 @@ func _refresh_map_rows() -> void:
 		_projection_row.visible = _is_map
 	if _mode_row != null:
 		_mode_row.visible = _is_map
-	if _mode_opt:
-		var allow_all := (_current_phase == Phase.CLIMATE or _current_phase == Phase.SELECT)
-		for i in _mode_opt.item_count:
-			var item_id: int = _mode_opt.get_item_id(i)
-			_mode_opt.set_item_disabled(i, item_id >= 2 and not allow_all)
+	if _layer_3d_row != null:
+		_layer_3d_row.visible = (not _is_map) and (_current_phase == Phase.CLIMATE)
 
 func set_map_mode(mode: int) -> void:
 	if _mode_opt == null:

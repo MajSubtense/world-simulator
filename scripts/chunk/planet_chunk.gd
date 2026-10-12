@@ -1,6 +1,11 @@
 class_name PlanetChunk
 extends RefCounted
 ## 一个区块的采样数据。最小加载/卸载单元。
+##
+## 采样数据分三层：
+##   heights / land_scores / temperatures / humidities  —— 全局宏观数据
+##   is_lands / materials                              —— 派生标记
+##   delta_heights / delta_materials                   —— 玩家修改（稀疏）
 
 const HALO := 1
 
